@@ -17,7 +17,7 @@ Catalyst Controller.
 
 =cut
 
-=head2 jobs
+=head2 get_pending_job
 
 Print server API to send print jobs to the Print Manager.
 
@@ -29,10 +29,12 @@ reset the status so another Print Manager can try again.
 
 =cut
 
-sub jobs : Path('print') : Args(0) {
+sub get_pending_job : Path('get_pending_job') : Args(0) {
     my ( $self, $c ) = @_;
 
     delete $c->stash->{Settings};
+
+    my $queued_to = $c->request->params->{name} || $c->request->address;
 
     my $instance = $c->instance;
     my $config   = $c->config->{instances}->{$instance} || $c->config;
@@ -40,9 +42,74 @@ sub jobs : Path('print') : Args(0) {
 
     my $now = $c->now();
 
-    my $print_jobs = $c->model('DB::PrintJob')->search( { status => "Queued" }, { order_by => { -asc => 'released_on' } } );
+    my $job = $c->model('DB::PrintJob')->search(
+        {
+            instance  => $instance,
+            status    => 'Pending',
+            type      => 'PrintManager',
+        },
+        {
+            order_by => { -asc => 'released_on' }
+        }
+    )->single();
+
+    my $data;
+    if ($job) {
+        if ( $job->update( { status => 'Queued', queued_on => $now, queued_to => $queued_to } ) ) {
+            $data = {
+                job_id        => $job->id,
+                copies        => $job->copies,
+                printer       => $job->printer,
+                user_id       => $job->user_id,
+                print_file_id => $job->id,
+            };
+
+            $c->stash( { job => $data } );
+        }
+    }
 
     $c->forward( $c->view('JSON') );
+}
+
+=head2 get_file
+
+Returns the PDF of a given print file id
+
+=cut
+
+sub get_file : Local : Args(1) {
+    my ( $self, $c, $id ) = @_;
+    my $instance = $c->instance;
+
+    my $print_file = $c->model('DB::PrintFile')->find({ id => $id, instance => $instance });
+
+    if ( $print_file ) {
+        my $filename = $print_file->filename;
+
+        $c->response->content_type('application/octet-stream');
+        $c->response->header( 'attachment', "$id.pdf" );
+        $c->response->body( $print_file->data );
+    } else {
+        $c->response->body( 'Page not found' );
+        $c->response->status(404);
+    }
+}
+
+=head2 job
+
+Print server API to update the status of a job,
+including setting a job to:
+    QUEUED: Job just added and has not yet been downloaded ( this is the status set by get_pending_job );
+    IN_PROGRESS: Job downloaded and has been added to the client-side native printer queue
+    DONE: Job printed successfully
+    ERROR: Job cannot be printed due to an error
+    SUBMITTED: Job submitted to third-party service ( meaning we may not get any feedback on success )
+    HELD: Job was successfully submitted but is pending some user action before being QUEUED
+
+=cut
+
+sub job : Path('job') : Args(0) {
+    #TODO
 }
 
 =head1 AUTHOR
