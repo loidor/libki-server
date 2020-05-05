@@ -89,7 +89,8 @@ sub get_file : Local : Args(1) {
         my $filename = $print_file->filename;
 
         $c->response->content_type('application/octet-stream');
-        $c->response->header( 'attachment', "$id.pdf" );
+        $c->response->header( 'Content-Disposition', qq[attachment; filename="$id.pdf"] );
+        $c->response->header( 'File-Id', $id );
         $c->response->body( $print_file->data );
     } else {
         $c->response->body( 'Page not found' );
