@@ -51,7 +51,7 @@ sub get_pending_job : Path('get_pending_job') : Args(0) {
         {
             order_by => { -asc => 'released_on' }
         }
-    )->single();
+    )->next();
 
     my $data;
     if ($job) {
@@ -61,7 +61,7 @@ sub get_pending_job : Path('get_pending_job') : Args(0) {
                 copies        => $job->copies,
                 printer       => $job->printer,
                 user_id       => $job->user_id,
-                print_file_id => $job->id,
+                print_file_id => $job->print_file_id,
             };
 
             $c->stash( { job => $data } );
@@ -81,6 +81,8 @@ sub get_file : Local : Args(1) {
     my ( $self, $c, $id ) = @_;
     my $instance = $c->instance;
 
+    warn "ID: '$id'";
+    warn "INSTANCE: '$instance'";
     my $print_file = $c->model('DB::PrintFile')->find({ id => $id, instance => $instance });
 
     if ( $print_file ) {

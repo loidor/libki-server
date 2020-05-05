@@ -87,6 +87,8 @@ sub google_cloud_authenticate : Private : Args(0) {
         }
     );
 
+    return unless $stored_token;
+
     my $encoded = $stored_token->value;
     my $frozen = decode_base64($stored_token->value);
     my $saved_session = thaw( $frozen );
