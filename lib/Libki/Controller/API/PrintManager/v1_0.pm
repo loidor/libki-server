@@ -3,6 +3,8 @@ package Libki::Controller::API::PrintManager::v1_0;
 use Moose;
 use namespace::autoclean;
 
+use List::Util qw(none);
+
 BEGIN { extends 'Catalyst::Controller'; }
 
 =head1 NAME
@@ -68,6 +70,7 @@ sub get_pending_job : Path('get_pending_job') : Args(0) {
         }
     }
 
+    delete( $c->stash->{'Settings'} );
     $c->forward( $c->view('JSON') );
 }
 
@@ -93,7 +96,7 @@ sub get_file : Local : Args(1) {
         $c->response->header( 'File-Id', $id );
         $c->response->body( $print_file->data );
     } else {
-        $c->response->body( 'Page not found' );
+        $c->response->body( 'File not found' );
         $c->response->status(404);
     }
 }
@@ -102,17 +105,43 @@ sub get_file : Local : Args(1) {
 
 Print server API to update the status of a job,
 including setting a job to:
-    QUEUED: Job just added and has not yet been downloaded ( this is the status set by get_pending_job );
-    IN_PROGRESS: Job downloaded and has been added to the client-side native printer queue
-    DONE: Job printed successfully
-    ERROR: Job cannot be printed due to an error
-    SUBMITTED: Job submitted to third-party service ( meaning we may not get any feedback on success )
-    HELD: Job was successfully submitted but is pending some user action before being QUEUED
+    Queued: Job just added and has not yet been downloaded ( this is the status set by get_pending_job );
+    InProgress: Job downloaded and has been added to the client-side native printer queue
+    Done: Job printed successfully
+    Error: Job cannot be printed due to an error
+    Submitted: Job submitted to third-party service ( meaning we may not get any feedback on success )
+    Held: Job was successfully submitted but is pending some user action before being QUEUED
 
 =cut
 
-sub job : Path('job') : Args(0) {
-    #TODO
+sub job :Path('job') :Args(2) {
+    my ( $self, $c, $job_id, $status ) = @_;
+    my $instance = $c->instance;
+
+    my $job = $c->model( 'DB::PrintJob' )->search(
+        {
+            id       => $job_id,
+            instance => $instance,
+        },
+    )->next();
+
+    if ( none { $_ eq $status } qw( Queued InProgress Done Error Submitted Held ) ) {
+        $c->response->body( 'Invalid job status' );
+        $c->response->status( 400 );
+    }
+    elsif ( $job ) {
+        $job->update( { status => $status } );
+
+        my %data = $job->get_columns;
+        $c->stash( { job => \%data } );
+
+        delete( $c->stash->{'Settings'} );
+        $c->forward( $c->view( 'JSON' ));
+    }
+    else {
+        $c->response->body( 'Print job not found' );
+        $c->response->status( 404 );
+    }
 }
 
 =head1 AUTHOR
