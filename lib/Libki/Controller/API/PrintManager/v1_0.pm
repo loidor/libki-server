@@ -57,6 +57,9 @@ sub get_pending_job : Path('get_pending_job') : Args(0) {
 
     my $data;
     if ($job) {
+        my $printer_configuration = $c->get_printer_configuration;
+        my $printer = $printer_configuration->{printers}->{ $job->printer };
+
         if ( $job->update( { status => 'Queued', queued_on => $now, queued_to => $queued_to } ) ) {
             $data = {
                 job_id        => $job->id,
@@ -64,6 +67,7 @@ sub get_pending_job : Path('get_pending_job') : Args(0) {
                 printer       => $job->printer,
                 user_id       => $job->user_id,
                 print_file_id => $job->print_file_id,
+                physical_printer_name => $printer->{physical_printer_name},
             };
 
             $c->stash( { job => $data } );
@@ -84,8 +88,6 @@ sub get_file : Local : Args(1) {
     my ( $self, $c, $id ) = @_;
     my $instance = $c->instance;
 
-    warn "ID: '$id'";
-    warn "INSTANCE: '$instance'";
     my $print_file = $c->model('DB::PrintFile')->find({ id => $id, instance => $instance });
 
     if ( $print_file ) {
